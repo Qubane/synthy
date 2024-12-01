@@ -1,7 +1,6 @@
 import math
-from collections.abc import Callable
-
 import pyaudio
+from collections.abc import Callable
 
 
 class Application:
@@ -9,10 +8,10 @@ class Application:
     Main application class
     """
 
-    def __init__(self, sample_rate: int, bit_width: int):
+    def __init__(self, sample_rate: int, byte_width: int):
         # values
-        self.bit_width: int = bit_width
-        self._max_int: int = 2 ** self.bit_width - 1
+        self.byte_width: int = byte_width
+        self._max_int: int = (2 ** (8 * self.byte_width)) / 2 - 1
         self.sample_rate: int = sample_rate
 
         # instance pyaudio
@@ -20,7 +19,7 @@ class Application:
 
         # open stream
         self.stream = self.pyaudio.open(
-            format=self.pyaudio.get_format_from_width(self.bit_width // 8, True),
+            format=self.pyaudio.get_format_from_width(self.byte_width),
             channels=1,
             rate=self.sample_rate,
             output=True)
@@ -30,10 +29,10 @@ class Application:
         Runs the application
         """
 
-        self.play_sine(100, 1)
-        self.play_tri(100, 1)
-        self.play_saw(100, 1)
-        self.play_square(100, 1)
+        self.play_sine(50, 1, 1)
+        self.play_tri(50, 1, 1)
+        self.play_saw(50, 1, 1)
+        self.play_square(50, 1, 1)
 
     def stop(self) -> None:
         """
@@ -44,7 +43,7 @@ class Application:
         self.pyaudio.terminate()
 
     @staticmethod
-    def clamp(value: float, min_: float = 0, max_: float = 1) -> float:
+    def clamp(value: float, min_: float = -1, max_: float = 1) -> float:
         """
         Clamps the value between 0 and 1
         :param value: value
@@ -66,7 +65,8 @@ class Application:
         sample_count = int(self.sample_rate * time)
         mapped_function = map(f, [x / self.sample_rate for x in range(sample_count)])
         clamped_function = [int(self.clamp(val, max_=amp) * self._max_int) for val in mapped_function]
-        self.stream.write(bytes(clamped_function))
+        byte_stream = b''.join([x.to_bytes(self.byte_width, "little", signed=True) for x in clamped_function])
+        self.stream.write(byte_stream)
 
     def play_sine(self, freq: float, time: float, amp: float = 1) -> None:
         """
@@ -76,7 +76,7 @@ class Application:
         :param amp: amplitude (range 0.0 - 1.0)
         """
 
-        self.play_lambda(lambda x: math.sin(x * freq * math.tau) / 2 + 0.5, time, amp)
+        self.play_lambda(lambda x: math.sin(x * freq * math.tau), time, amp)
 
     def play_tri(self, freq: float, time: float, amp: float = 1) -> None:
         """
@@ -86,7 +86,7 @@ class Application:
         :param amp: amplitude (range 0.0 - 1.0)
         """
 
-        self.play_lambda(lambda x: abs((x * 2 * freq % 2) - 1), time, amp)
+        self.play_lambda(lambda x: abs((2 * x * freq % 2) - 1) * 2 - 1, time, amp)
 
     def play_saw(self, freq: float, time: float, amp: float = 1) -> None:
         """
@@ -96,7 +96,7 @@ class Application:
         :param amp: amplitude (range 0.0 - 1.0)
         """
 
-        self.play_lambda(lambda x: x * freq % 1, time, amp)
+        self.play_lambda(lambda x: (2 * x * freq % 2) - 1, time, amp)
 
     def play_square(self, freq: float, time: float, amp: float = 1) -> None:
         """
@@ -106,11 +106,11 @@ class Application:
         :param amp: amplitude (range 0.0 - 1.0)
         """
 
-        self.play_lambda(lambda x: ((x * freq % 1) - (x * freq % 0.5)) * 2, time, amp)
+        self.play_lambda(lambda x: ((x * freq % 1) - (x * freq % 0.5)) * 4 - 1, time, amp)
 
 
 def main():
-    app = Application(sample_rate=100000, bit_width=8)
+    app = Application(sample_rate=48000, byte_width=2)
     app.run()
     app.stop()
 
